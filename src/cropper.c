@@ -11,12 +11,9 @@
 
 #define MIN_CROP 16
 
-// ── Gruvbox dark palette ────────────────────────────────────────────
-static const Color GB_BG0    = { 0x1d, 0x20, 0x21, 255 };
-static const Color GB_FG0    = { 0xeb, 0xdb, 0xb2, 255 };
-static const Color GB_FG1    = { 0xd5, 0xc4, 0xa1, 255 };
-static const Color GB_RED    = { 0xcc, 0x24, 0x1d, 255 };
-static const Color GB_YELLOW = { 0xd7, 0x99, 0x21, 255 };
+// ── palette ─────────────────────────────────────────────────────────
+static const Color CROP_OUTLINE = { 0xcc, 0x24, 0x1d, 255 };
+static const Color HINT_COLOR   = { 200, 200, 200, 255 };
 
 
 // ── geometry ────────────────────────────────────────────────────────
@@ -94,7 +91,7 @@ static void draw_overlay(int sw, int sh, Rect const *r,
 
     DrawRectangleLinesEx(
         (Rectangle) { (float)cx, (float)cy, (float)cw, (float)ch },
-        2, GB_RED);
+        2, CROP_OUTLINE);
 }
 
 #define BAR_FS 24
@@ -114,17 +111,17 @@ static void draw_info_bar(Font font, int sw, int sh, Rect const *r,
         snprintf(info, sizeof info, "%dx%d  |  %d:%d",
                  r->w, r->h, aw, ah);
 
-    DrawRectangle(0, y_base, sw, bh, GB_BG0);
+    DrawRectangle(0, y_base, sw, bh, BLACK);
     int y = y_base + (bh - BAR_FS) / 2;
     float tw = MeasureTextEx(font, info, BAR_FS, 1).x;
-    DrawTextEx(font, info, (Vector2){ sw - 8 - tw, y }, BAR_FS, 1, GB_FG0);
+    DrawTextEx(font, info, (Vector2){ sw - 8 - tw, y }, BAR_FS, 1, WHITE);
 }
 
 static void draw_help_bar(Font font, int sw, int sh)
 {
     int y_base = sh - BAR_BH;
 
-    DrawRectangle(0, y_base, sw, BAR_BH, GB_BG0);
+    DrawRectangle(0, y_base, sw, BAR_BH, BLACK);
 
     char left[160];
     snprintf(left, sizeof left,
@@ -132,7 +129,7 @@ static void draw_help_bar(Font font, int sw, int sh)
              "  Esc/q quit  |  ? help");
 
     int y = y_base + (BAR_BH - BAR_FS) / 2;
-    DrawTextEx(font, left, (Vector2){ 8, y }, BAR_FS, 1, GB_FG1);
+    DrawTextEx(font, left, (Vector2){ 8, y }, BAR_FS, 1, WHITE);
 }
 
 // ── key repeat (rollover) ──────────────────────────────────────────
@@ -152,6 +149,14 @@ static bool key_repeat(KeyRep *kr, int key)
     int n = (int)(elapsed / REPEAT_RATE);
     if (n > 0) { kr->t -= n * REPEAT_RATE; return true; }
     return false;
+}
+
+// ── helpers ─────────────────────────────────────────────────────────
+
+static inline int step_val(int count)
+{
+    return count > 0 ? count
+         : (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT) ? 10 : 1);
 }
 
 // ── main ────────────────────────────────────────────────────────────
@@ -176,7 +181,7 @@ int main(int argc, char **argv)
     }
 
     char const *img_path = argv[2];
-    char const *out_path = nullptr;
+    char const *out_path = NULL;
 
     for (int i = 3; i < argc; i++) {
         if (strcmp(argv[i], "--output") == 0 && i + 1 < argc)
@@ -190,7 +195,7 @@ int main(int argc, char **argv)
 
     // ---- load image ----
     Image img = LoadImage(img_path);
-    if (img.data == nullptr) {
+    if (img.data == NULL) {
         fprintf(stderr, "error: could not load '%s'\n", img_path);
         return 1;
     }
@@ -229,29 +234,16 @@ int main(int argc, char **argv)
     while (!quit && !WindowShouldClose()) {
         // --- input ---
         // ---- count prefix ----
-        if (IsKeyPressed(KEY_ZERO)) {
-                count = count * 10;
-            } else if (IsKeyPressed(KEY_ONE)) {
-                count = count * 10 + 1;
-            } else if (IsKeyPressed(KEY_TWO)) {
-                count = count * 10 + 2;
-            } else if (IsKeyPressed(KEY_THREE)) {
-                count = count * 10 + 3;
-            } else if (IsKeyPressed(KEY_FOUR)) {
-                count = count * 10 + 4;
-            } else if (IsKeyPressed(KEY_FIVE)) {
-                count = count * 10 + 5;
-            } else if (IsKeyPressed(KEY_SIX)) {
-                count = count * 10 + 6;
-            } else if (IsKeyPressed(KEY_SEVEN)) {
-                count = count * 10 + 7;
-            } else if (IsKeyPressed(KEY_EIGHT)) {
-                count = count * 10 + 8;
-            } else if (IsKeyPressed(KEY_NINE)) {
-                count = count * 10 + 9;
-            } else
-            // ---- actions ----
-            if (IsKeyPressed(KEY_ENTER)) {
+        int d;
+        for (d = 0; d <= 9; d++) {
+            if (IsKeyPressed(KEY_ZERO + d)) {
+                count = count * 10 + d;
+                break;
+            }
+        }
+        if (d > 9) {
+        // ---- actions ----
+        if (IsKeyPressed(KEY_ENTER)) {
                 count = 0;
                 save = true;
                 quit = true;
@@ -265,33 +257,34 @@ int main(int argc, char **argv)
                 show_help = !show_help;
 
             } else if (key_repeat(&kr_a, KEY_A)) {
-                int s = (count > 0) ? count : (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT) ? 10 : 1);
+                int s = step_val(count);
                 count = 0;
                 scale_from_centre(&crop, img.width, img.height,
                                   aspect_w, aspect_h, 1, s);
             } else if (key_repeat(&kr_s, KEY_S)) {
-                int s = (count > 0) ? count : (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT) ? 10 : 1);
+                int s = step_val(count);
                 count = 0;
                 scale_from_centre(&crop, img.width, img.height,
                                   aspect_w, aspect_h, -1, s);
 
             } else if (key_repeat(&kr_h, KEY_H)) {
-                int n = (count > 0) ? count : (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT) ? 10 : 1);
+                int n = step_val(count);
                 count = 0;
                 nudge(&crop, img.width, img.height, -n, 0);
             } else if (key_repeat(&kr_j, KEY_J)) {
-                int n = (count > 0) ? count : (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT) ? 10 : 1);
+                int n = step_val(count);
                 count = 0;
                 nudge(&crop, img.width, img.height, 0, n);
             } else if (key_repeat(&kr_k, KEY_K)) {
-                int n = (count > 0) ? count : (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT) ? 10 : 1);
+                int n = step_val(count);
                 count = 0;
                 nudge(&crop, img.width, img.height, 0, -n);
             } else if (key_repeat(&kr_l, KEY_L)) {
-                int n = (count > 0) ? count : (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT) ? 10 : 1);
+                int n = step_val(count);
                 count = 0;
                 nudge(&crop, img.width, img.height, n, 0);
             }
+        }
 
         // --- recalc layout (window may have been resized) ---
 
@@ -322,7 +315,7 @@ int main(int argc, char **argv)
         } else {
             DrawTextEx(font, "? help",
                        (Vector2){ 8, (float)sh - BAR_BH + (BAR_BH - BAR_FS) / 2 },
-                       BAR_FS, 1, GB_FG1);
+                       BAR_FS, 1, HINT_COLOR);
         }
 
         EndDrawing();
