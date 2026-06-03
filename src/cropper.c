@@ -97,44 +97,42 @@ static void draw_overlay(int sw, int sh, Rect const *r,
         2, GB_RED);
 }
 
-static int bar_height(float ts)
-{
-    int fs = (int)(24 * ts);
-    return fs + 16;
-}
+#define BAR_FS 24
+#define BAR_BH (BAR_FS + 16)
 
 static void draw_info_bar(Font font, int sw, int sh, Rect const *r,
-                          int aw, int ah, float ts, int y_off)
+                          int aw, int ah, int y_off, int count)
 {
-    int fs = (int)(24 * ts);
-    int bh = bar_height(ts);
+    int bh = BAR_BH;
     int y_base = sh - bh - y_off;
 
     char info[80];
-    snprintf(info, sizeof info,
-             "%dx%d  |  %d:%d", r->w, r->h, aw, ah);
+    if (count > 0)
+        snprintf(info, sizeof info, "%d  %dx%d  |  %d:%d",
+                 count, r->w, r->h, aw, ah);
+    else
+        snprintf(info, sizeof info, "%dx%d  |  %d:%d",
+                 r->w, r->h, aw, ah);
 
     DrawRectangle(0, y_base, sw, bh, GB_BG0);
-    int y = y_base + (bh - fs) / 2;
-    float tw = MeasureTextEx(font, info, fs, 1).x;
-    DrawTextEx(font, info, (Vector2){ sw - 8 - tw, y }, fs, 1, GB_FG0);
+    int y = y_base + (bh - BAR_FS) / 2;
+    float tw = MeasureTextEx(font, info, BAR_FS, 1).x;
+    DrawTextEx(font, info, (Vector2){ sw - 8 - tw, y }, BAR_FS, 1, GB_FG0);
 }
 
-static void draw_help_bar(Font font, int sw, int sh, float ts)
+static void draw_help_bar(Font font, int sw, int sh)
 {
-    int fs = (int)(24 * ts);
-    int bh = bar_height(ts);
-    int y_base = sh - bh;
+    int y_base = sh - BAR_BH;
 
-    DrawRectangle(0, y_base, sw, bh, GB_BG0);
+    DrawRectangle(0, y_base, sw, BAR_BH, GB_BG0);
 
     char left[160];
     snprintf(left, sizeof left,
              "h/j/k/l nudge  |  a/s scale  |  Enter save  |"
-             "  Esc/q quit  |  [] txt  |  ? help");
+             "  Esc/q quit  |  ? help");
 
-    int y = y_base + (bh - fs) / 2;
-    DrawTextEx(font, left, (Vector2){ 8, y }, fs, 1, GB_FG1);
+    int y = y_base + (BAR_BH - BAR_FS) / 2;
+    DrawTextEx(font, left, (Vector2){ 8, y }, BAR_FS, 1, GB_FG1);
 }
 
 // ── key repeat (rollover) ──────────────────────────────────────────
@@ -224,7 +222,7 @@ int main(int argc, char **argv)
     // ---- load monospace font ----
     Font font;
 #ifdef FONT_PATH
-    font = LoadFontEx(FONT_PATH, 48, 0, 0);
+    font = LoadFontEx(FONT_PATH, BAR_FS, 0, 0);
     if (font.texture.id == 0)
         font = GetFontDefault();
 #else
@@ -245,8 +243,8 @@ int main(int argc, char **argv)
 
     SetTargetFPS(60);
 
-    float text_scale  = 1.0f;
-    bool  show_help    = false;
+    int  count      = 0;
+    bool show_help   = false;
     bool confirm_warn = false;
     bool save = false;
     bool quit = false;
@@ -265,12 +263,31 @@ int main(int argc, char **argv)
                 confirm_warn = false;
             }
         } else {
-            if (IsKeyPressed(KEY_LEFT_BRACKET)) {
-                text_scale = fmaxf(0.5f, text_scale - 0.25f);
-            } else if (IsKeyPressed(KEY_RIGHT_BRACKET)) {
-                text_scale = fminf(3.0f, text_scale + 0.25f);
-
-            } else if (IsKeyPressed(KEY_ENTER)) {
+            // ---- count prefix ----
+            if (IsKeyPressed(KEY_ZERO)) {
+                count = count * 10;
+            } else if (IsKeyPressed(KEY_ONE)) {
+                count = count * 10 + 1;
+            } else if (IsKeyPressed(KEY_TWO)) {
+                count = count * 10 + 2;
+            } else if (IsKeyPressed(KEY_THREE)) {
+                count = count * 10 + 3;
+            } else if (IsKeyPressed(KEY_FOUR)) {
+                count = count * 10 + 4;
+            } else if (IsKeyPressed(KEY_FIVE)) {
+                count = count * 10 + 5;
+            } else if (IsKeyPressed(KEY_SIX)) {
+                count = count * 10 + 6;
+            } else if (IsKeyPressed(KEY_SEVEN)) {
+                count = count * 10 + 7;
+            } else if (IsKeyPressed(KEY_EIGHT)) {
+                count = count * 10 + 8;
+            } else if (IsKeyPressed(KEY_NINE)) {
+                count = count * 10 + 9;
+            } else
+            // ---- actions ----
+            if (IsKeyPressed(KEY_ENTER)) {
+                count = 0;
                 if (no_warn) {
                     save = true;
                     quit = true;
@@ -281,32 +298,40 @@ int main(int argc, char **argv)
                     quit = true;
                 }
             } else if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_Q)) {
+                count = 0;
                 quit = true;
 
             } else if (IsKeyPressed(KEY_SLASH)
                        && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT))) {
+                count = 0;
                 show_help = !show_help;
 
             } else if (key_repeat(&kr_a, KEY_A)) {
-                int s = (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) ? 10 : 1;
+                int s = (count > 0) ? count : (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT) ? 10 : 1);
+                count = 0;
                 scale_from_centre(&crop, img.width, img.height,
                                   aspect_w, aspect_h, 1, s);
             } else if (key_repeat(&kr_s, KEY_S)) {
-                int s = (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) ? 10 : 1;
+                int s = (count > 0) ? count : (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT) ? 10 : 1);
+                count = 0;
                 scale_from_centre(&crop, img.width, img.height,
                                   aspect_w, aspect_h, -1, s);
 
             } else if (key_repeat(&kr_h, KEY_H)) {
-                int n = (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) ? 10 : 1;
+                int n = (count > 0) ? count : (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT) ? 10 : 1);
+                count = 0;
                 nudge(&crop, img.width, img.height, -n, 0);
             } else if (key_repeat(&kr_j, KEY_J)) {
-                int n = (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) ? 10 : 1;
+                int n = (count > 0) ? count : (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT) ? 10 : 1);
+                count = 0;
                 nudge(&crop, img.width, img.height, 0, n);
             } else if (key_repeat(&kr_k, KEY_K)) {
-                int n = (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) ? 10 : 1;
+                int n = (count > 0) ? count : (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT) ? 10 : 1);
+                count = 0;
                 nudge(&crop, img.width, img.height, 0, -n);
             } else if (key_repeat(&kr_l, KEY_L)) {
-                int n = (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) ? 10 : 1;
+                int n = (count > 0) ? count : (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT) ? 10 : 1);
+                count = 0;
                 nudge(&crop, img.width, img.height, n, 0);
             }
         }
@@ -331,17 +356,15 @@ int main(int argc, char **argv)
 
         draw_overlay(sw, sh, &crop, scale, ox, oy);
 
-        int help_h = show_help ? bar_height(text_scale) : 0;
+        int help_h = show_help ? BAR_BH : 0;
         draw_info_bar(font, sw, sh, &crop,
-                      aspect_w, aspect_h, text_scale, help_h);
+                      aspect_w, aspect_h, help_h, count);
         if (show_help) {
-            draw_help_bar(font, sw, sh, text_scale);
+            draw_help_bar(font, sw, sh);
         } else {
-            int fs = (int)(24 * text_scale);
-            int bh = bar_height(text_scale);
             DrawTextEx(font, "? help",
-                       (Vector2){ 8, sh - bh + (bh - fs) / 2 },
-                       fs, 1, GB_FG1);
+                       (Vector2){ 8, (float)sh - BAR_BH + (BAR_BH - BAR_FS) / 2 },
+                       BAR_FS, 1, GB_FG1);
         }
 
         if (confirm_warn) {
@@ -350,11 +373,10 @@ int main(int argc, char **argv)
             char const *msg =
                 "Cropped image is smaller than desktop dimensions."
                 " Proceed? (y/n)";
-            int fs = (int)(40 * text_scale);
-            float tw = MeasureTextEx(font, msg, fs, 1).x;
+            float tw = MeasureTextEx(font, msg, BAR_FS, 1).x;
             DrawTextEx(font, msg,
-                       (Vector2){ sw / 2 - tw / 2, sh / 2 - fs / 2 },
-                       fs, 1, GB_YELLOW);
+                       (Vector2){ sw / 2 - tw / 2, (float)sh / 2 - BAR_FS / 2 },
+                       BAR_FS, 1, GB_YELLOW);
         }
 
         EndDrawing();
