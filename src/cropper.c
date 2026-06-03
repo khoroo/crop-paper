@@ -161,9 +161,7 @@ int main(int argc, char **argv)
     // ---- arg parse ----
     if (argc < 4) {
         fprintf(stderr,
-            "Usage: %s <W:H> <image> --output <path>"
-            " [--nowarn]"
-            " [--warn-width W] [--warn-height H]\n",
+            "Usage: %s <W:H> <image> --output <path>\n",
             argv[0]);
         return 1;
     }
@@ -179,22 +177,10 @@ int main(int argc, char **argv)
 
     char const *img_path = argv[2];
     char const *out_path = nullptr;
-    int warn_w = 0, warn_h = 0;
-    bool warn_custom = false;
-    bool no_warn = false;
 
     for (int i = 3; i < argc; i++) {
         if (strcmp(argv[i], "--output") == 0 && i + 1 < argc)
             out_path = argv[++i];
-        else if (strcmp(argv[i], "--nowarn") == 0)
-            no_warn = true;
-        else if (strcmp(argv[i], "--warn-width") == 0 && i + 1 < argc) {
-            warn_w = atoi(argv[++i]);
-            warn_custom = true;
-        } else if (strcmp(argv[i], "--warn-height") == 0 && i + 1 < argc) {
-            warn_h = atoi(argv[++i]);
-            warn_custom = true;
-        }
     }
 
     if (!out_path) {
@@ -229,23 +215,10 @@ int main(int argc, char **argv)
     font = GetFontDefault();
 #endif
 
-    // ---- warning thresholds ----
-    int mon = GetCurrentMonitor();
-    int mon_w = GetMonitorWidth(mon);
-    int mon_h = GetMonitorHeight(mon);
-    if (warn_custom) {
-        if (warn_w <= 0) warn_w = mon_w;
-        if (warn_h <= 0) warn_h = mon_h;
-    } else {
-        warn_w = mon_w;
-        warn_h = mon_h;
-    }
-
     SetTargetFPS(60);
 
-    int  count      = 0;
-    bool show_help   = false;
-    bool confirm_warn = false;
+    int  count    = 0;
+    bool show_help = false;
     bool save = false;
     bool quit = false;
 
@@ -255,16 +228,8 @@ int main(int argc, char **argv)
     // ---- main loop ----
     while (!quit && !WindowShouldClose()) {
         // --- input ---
-        if (confirm_warn) {
-            if (IsKeyPressed(KEY_Y)) {
-                save = true;
-                quit = true;
-            } else if (IsKeyPressed(KEY_N) || IsKeyPressed(KEY_ESCAPE)) {
-                confirm_warn = false;
-            }
-        } else {
-            // ---- count prefix ----
-            if (IsKeyPressed(KEY_ZERO)) {
+        // ---- count prefix ----
+        if (IsKeyPressed(KEY_ZERO)) {
                 count = count * 10;
             } else if (IsKeyPressed(KEY_ONE)) {
                 count = count * 10 + 1;
@@ -288,15 +253,8 @@ int main(int argc, char **argv)
             // ---- actions ----
             if (IsKeyPressed(KEY_ENTER)) {
                 count = 0;
-                if (no_warn) {
-                    save = true;
-                    quit = true;
-                } else if (crop.w < warn_w || crop.h < warn_h) {
-                    confirm_warn = true;
-                } else {
-                    save = true;
-                    quit = true;
-                }
+                save = true;
+                quit = true;
             } else if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_Q)) {
                 count = 0;
                 quit = true;
@@ -334,9 +292,9 @@ int main(int argc, char **argv)
                 count = 0;
                 nudge(&crop, img.width, img.height, n, 0);
             }
-        }
 
         // --- recalc layout (window may have been resized) ---
+
         int sw = GetScreenWidth();
         int sh = GetScreenHeight();
         float scale = fminf((float)sw / img.width, (float)sh / img.height);
@@ -365,18 +323,6 @@ int main(int argc, char **argv)
             DrawTextEx(font, "? help",
                        (Vector2){ 8, (float)sh - BAR_BH + (BAR_BH - BAR_FS) / 2 },
                        BAR_FS, 1, GB_FG1);
-        }
-
-        if (confirm_warn) {
-            DrawRectangle(0, sh / 2 - 40, sw, 80,
-                          (Color){ 0, 0, 0, 200 });
-            char const *msg =
-                "Cropped image is smaller than desktop dimensions."
-                " Proceed? (y/n)";
-            float tw = MeasureTextEx(font, msg, BAR_FS, 1).x;
-            DrawTextEx(font, msg,
-                       (Vector2){ sw / 2 - tw / 2, (float)sh / 2 - BAR_FS / 2 },
-                       BAR_FS, 1, GB_YELLOW);
         }
 
         EndDrawing();
