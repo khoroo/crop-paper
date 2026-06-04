@@ -5,7 +5,7 @@ Simple C + Raylib program to crop images for desktop wallpapers.
 ## Usage
 
 ```
-cropper <W:H> <image> --output <path>
+crop-paper <W:H> <image> --output <path>
 ```
 
 Controls:

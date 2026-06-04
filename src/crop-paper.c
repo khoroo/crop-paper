@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// cropper — crop images to a specified aspect ratio
+// crop-paper — crop images to a specified aspect ratio
 
 #define _POSIX_C_SOURCE 200809L
 
@@ -243,7 +243,7 @@ int main(int argc, char **argv)
 
     // ---- init window ----
     SetWindowState(FLAG_WINDOW_RESIZABLE);
-    InitWindow(img.width, img.height, "cropper");
+    InitWindow(img.width, img.height, "crop-paper");
     SetExitKey(0);
 
     Texture2D tex = LoadTextureFromImage(img);
@@ -331,6 +331,11 @@ int main(int argc, char **argv)
         int ox = (int)((sw - img.width  * scale) / 2);
         int oy = (int)((sh - img.height * scale) / 2);
 
+        float focus_scale = fminf((float)sw / crop.w, (float)sh / crop.h);
+        if (focus_scale > 1.0f) focus_scale = 1.0f;
+        int fx = (int)((sw - crop.w * focus_scale) / 2);
+        int fy = (int)((sh - crop.h * focus_scale) / 2);
+
         // --- draw ---
         BeginDrawing();
         ClearBackground(BLACK);
@@ -339,10 +344,12 @@ int main(int argc, char **argv)
             DrawTexturePro(tex,
                 (Rectangle){ (float)crop.x, (float)crop.y,
                              (float)crop.w, (float)crop.h },
-                (Rectangle){ 0, 0, (float)sw, (float)sh },
+                (Rectangle){ (float)fx, (float)fy,
+                             crop.w * focus_scale, crop.h * focus_scale },
                 (Vector2){ 0, 0 }, 0, WHITE);
             DrawRectangleLinesEx(
-                (Rectangle){ 0, 0, (float)sw, (float)sh },
+                (Rectangle){ (float)fx, (float)fy,
+                             crop.w * focus_scale, crop.h * focus_scale },
                 1, CROP_OUTLINE);
         } else {
             DrawTexturePro(tex,

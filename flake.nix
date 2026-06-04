@@ -1,5 +1,5 @@
 {
-  description = "cropper - crop images to a given aspect ratio";
+  description = "crop-paper - crop images to a given aspect ratio";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -19,7 +19,7 @@
   in {
     packages = perSystem (pkgs: my-font: fontsConf: {
       default = pkgs.stdenv.mkDerivation {
-        pname = "cropper";
+        pname = "crop-paper";
         version = "0.1.0";
         src = nixpkgs.lib.cleanSource ./.;
 
@@ -34,12 +34,12 @@
             $(pkg-config --cflags raylib) \
             $(pkg-config --libs raylib) -lm \
             $(pkg-config --cflags --libs fontconfig) \
-            -o cropper src/cropper.c
+            -o crop-paper src/crop-paper.c
         '';
 
         installPhase = ''
           mkdir -p $out/bin
-          cp cropper $out/bin/
+          cp crop-paper $out/bin/
         '';
 
         meta = with nixpkgs.lib; {
