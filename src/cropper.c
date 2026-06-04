@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <fontconfig/fontconfig.h>
 
 #define MIN_CROP 16
 
@@ -94,14 +95,20 @@ static void draw_overlay(int sw, int sh, Rect const *r,
         2, CROP_OUTLINE);
 }
 
-#define BAR_FS 24
+#define BAR_FS 28
 #define BAR_BH (BAR_FS + 16)
 
 static void draw_info_bar(Font font, int sw, int sh, Rect const *r,
-                          int aw, int ah, int y_off, int count)
+                          int aw, int ah, int count,
+                          bool crop_view)
 {
     int bh = BAR_BH;
-    int y_base = sh - bh - y_off;
+    int y_base = sh - bh;
+
+    DrawRectangle(0, y_base, sw, bh, BLACK);
+    int y = y_base + (bh - BAR_FS) / 2;
+
+    DrawTextEx(font, "? help", (Vector2){ 8, y }, BAR_FS, 1, HINT_COLOR);
 
     char info[80];
     if (count > 0)
@@ -110,23 +117,23 @@ static void draw_info_bar(Font font, int sw, int sh, Rect const *r,
     else
         snprintf(info, sizeof info, "%dx%d  |  %d:%d",
                  r->w, r->h, aw, ah);
+    if (crop_view)
+        strcat(info, "  [focus]");
 
-    DrawRectangle(0, y_base, sw, bh, BLACK);
-    int y = y_base + (bh - BAR_FS) / 2;
     float tw = MeasureTextEx(font, info, BAR_FS, 1).x;
     DrawTextEx(font, info, (Vector2){ sw - 8 - tw, y }, BAR_FS, 1, WHITE);
 }
 
 static void draw_help_bar(Font font, int sw, int sh)
 {
-    int y_base = sh - BAR_BH;
+    int y_base = sh - BAR_BH * 2;
 
     DrawRectangle(0, y_base, sw, BAR_BH, BLACK);
 
     char left[160];
     snprintf(left, sizeof left,
-             "h/j/k/l nudge  |  a/s scale  |  Enter save  |"
-             "  Esc/q quit  |  ? help");
+             "h/j/k/l nudge  |  a/s scale  |  f focus  |"
+             "  Enter save  |  Esc/q quit  |  ? help");
 
     int y = y_base + (BAR_BH - BAR_FS) / 2;
     DrawTextEx(font, left, (Vector2){ 8, y }, BAR_FS, 1, WHITE);
@@ -149,6 +156,37 @@ static bool key_repeat(KeyRep *kr, int key)
     int n = (int)(elapsed / REPEAT_RATE);
     if (n > 0) { kr->t -= n * REPEAT_RATE; return true; }
     return false;
+}
+
+// ── font loading ────────────────────────────────────────────────────
+
+static Font load_mono_font(int font_size)
+{
+    if (!FcInit()) return GetFontDefault();
+
+    FcPattern *pat = FcNameParse((const FcChar8 *)"JetBrains Mono");
+    if (!pat) { FcFini(); return GetFontDefault(); }
+
+    FcConfigSubstitute(NULL, pat, FcMatchPattern);
+    FcDefaultSubstitute(pat);
+
+    FcResult result;
+    FcPattern *match = FcFontMatch(NULL, pat, &result);
+    FcPatternDestroy(pat);
+
+    if (!match) { FcFini(); return GetFontDefault(); }
+
+    FcChar8 *file;
+    Font font = GetFontDefault();
+    if (FcPatternGetString(match, FC_FILE, 0, &file) == FcResultMatch) {
+        font = LoadFontEx((const char *)file, font_size, 0, 0);
+        if (font.texture.id == 0)
+            font = GetFontDefault();
+    }
+
+    FcPatternDestroy(match);
+    FcFini();
+    return font;
 }
 
 // ── helpers ─────────────────────────────────────────────────────────
@@ -210,20 +248,14 @@ int main(int argc, char **argv)
 
     Texture2D tex = LoadTextureFromImage(img);
 
-    // ---- load monospace font ----
-    Font font;
-#ifdef FONT_PATH
-    font = LoadFontEx(FONT_PATH, BAR_FS, 0, 0);
-    if (font.texture.id == 0)
-        font = GetFontDefault();
-#else
-    font = GetFontDefault();
-#endif
+    // ---- load monospace font (resolve via fontconfig) ----
+    Font font = load_mono_font(BAR_FS);
 
     SetTargetFPS(60);
 
     int  count    = 0;
-    bool show_help = false;
+    bool  show_help = false;
+    bool  crop_view = false;
     bool save = false;
     bool quit = false;
 
@@ -255,6 +287,10 @@ int main(int argc, char **argv)
                        && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT))) {
                 count = 0;
                 show_help = !show_help;
+
+            } else if (IsKeyPressed(KEY_F)) {
+                count = 0;
+                crop_view = !crop_view;
 
             } else if (key_repeat(&kr_a, KEY_A)) {
                 int s = step_val(count);
@@ -299,24 +335,29 @@ int main(int argc, char **argv)
         BeginDrawing();
         ClearBackground(BLACK);
 
-        DrawTexturePro(tex,
-            (Rectangle){ 0, 0, (float)img.width, (float)img.height },
-            (Rectangle){ (float)ox, (float)oy,
-                         img.width * scale, img.height * scale },
-            (Vector2){ 0, 0 }, 0, WHITE);
-
-        draw_overlay(sw, sh, &crop, scale, ox, oy);
-
-        int help_h = show_help ? BAR_BH : 0;
-        draw_info_bar(font, sw, sh, &crop,
-                      aspect_w, aspect_h, help_h, count);
-        if (show_help) {
-            draw_help_bar(font, sw, sh);
+        if (crop_view) {
+            DrawTexturePro(tex,
+                (Rectangle){ (float)crop.x, (float)crop.y,
+                             (float)crop.w, (float)crop.h },
+                (Rectangle){ 0, 0, (float)sw, (float)sh },
+                (Vector2){ 0, 0 }, 0, WHITE);
+            DrawRectangleLinesEx(
+                (Rectangle){ 0, 0, (float)sw, (float)sh },
+                1, CROP_OUTLINE);
         } else {
-            DrawTextEx(font, "? help",
-                       (Vector2){ 8, (float)sh - BAR_BH + (BAR_BH - BAR_FS) / 2 },
-                       BAR_FS, 1, HINT_COLOR);
+            DrawTexturePro(tex,
+                (Rectangle){ 0, 0, (float)img.width, (float)img.height },
+                (Rectangle){ (float)ox, (float)oy,
+                             img.width * scale, img.height * scale },
+                (Vector2){ 0, 0 }, 0, WHITE);
+
+            draw_overlay(sw, sh, &crop, scale, ox, oy);
         }
+
+        draw_info_bar(font, sw, sh, &crop,
+                      aspect_w, aspect_h, count, crop_view);
+        if (show_help)
+            draw_help_bar(font, sw, sh);
 
         EndDrawing();
     }

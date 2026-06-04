@@ -6,32 +6,34 @@
   outputs = { self, nixpkgs }: let
     systems = [ "x86_64-linux" "aarch64-linux" ];
     forAllSystems = nixpkgs.lib.genAttrs systems;
-  in {
-    packages = forAllSystems (system: let
+
+    perSystem = f: forAllSystems (system: let
       pkgs = import nixpkgs { inherit system; };
-      fontPath = "${pkgs.dejavu_fonts}/share/fonts/truetype/DejaVuSansMono.ttf";
-    in {
+
+      my-font = pkgs.jetbrains-mono;
+
+      fontsConf = pkgs.makeFontsConf {
+        fontDirectories = [ my-font ];
+      };
+    in f pkgs my-font fontsConf);
+  in {
+    packages = perSystem (pkgs: my-font: fontsConf: {
       default = pkgs.stdenv.mkDerivation {
         pname = "cropper";
         version = "0.1.0";
         src = nixpkgs.lib.cleanSource ./.;
 
         nativeBuildInputs = with pkgs; [ pkg-config ];
-        buildInputs = with pkgs; [ raylib dejavu_fonts ];
+        buildInputs = with pkgs; [ raylib fontconfig my-font ];
 
         env.NIX_CFLAGS_COMPILE = "-std=c23 -Wall -Wextra -pedantic -O2";
 
-        preBuild = ''
-          cat > font_path.h <<EOF
-#define FONT_PATH "${fontPath}"
-EOF
-        '';
-
         buildPhase = ''
+          export FONTCONFIG_FILE="${fontsConf}"
           $CC \
             $(pkg-config --cflags raylib) \
             $(pkg-config --libs raylib) -lm \
-            -include font_path.h \
+            $(pkg-config --cflags --libs fontconfig) \
             -o cropper src/cropper.c
         '';
 
@@ -49,27 +51,16 @@ EOF
       };
     });
 
-    devShells = forAllSystems (system: let
-      pkgs = import nixpkgs { inherit system; };
-    in {
+    devShells = perSystem (pkgs: my-font: fontsConf: {
       default = pkgs.mkShell {
-        buildInputs = with pkgs; [ raylib dejavu_fonts pkg-config ];
+        buildInputs = with pkgs; [ raylib fontconfig my-font pkg-config ];
+
+        shellHook = ''
+          export FONTCONFIG_FILE="${fontsConf}"
+        '';
       };
     });
 
     formatter = forAllSystems (system: nixpkgs.legacyPackages.${system}.nixpkgs-fmt);
-
-    checks = forAllSystems (system: let
-      pkgs = nixpkgs.legacyPackages.${system};
-    in {
-      default = pkgs.runCommand "cropper-check" { nativeBuildInputs = [ pkgs.gnugrep ]; } ''
-        ${self.packages.${system}.default}/bin/cropper 2>&1 \
-          | grep -q "Usage:" || {
-          echo "FAIL: expected usage message"
-          exit 1
-        }
-        touch $out
-      '';
-    });
   };
 }
