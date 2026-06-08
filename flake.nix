@@ -24,7 +24,7 @@
         env.NIX_CFLAGS_COMPILE = "-std=c23 -Wall -Wextra -pedantic -O2";
 
         buildPhase = ''
-          pyftsubset ${my-font}/share/fonts/truetype/Iosevka-Regular.ttf \
+          pyftsubset ${my-font}/share/fonts/truetype/Iosevka-Medium.ttf \
             --unicodes="U+0020-007E" \
             --output-file=iosevka-subset.ttf
 

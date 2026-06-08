@@ -16,7 +16,6 @@ typedef struct { int key; int val; } LastAction;
 
 // ── palette ─────────────────────────────────────────────────────────
 static const Color CROP_OUTLINE = { 0xcc, 0x24, 0x1d, 255 };
-static const Color HINT_COLOR   = { 200, 200, 200, 255 };
 
 
 // ── geometry ────────────────────────────────────────────────────────
@@ -110,7 +109,7 @@ static void draw_info_bar(Font font, int sw, int sh, Rect const *r,
     DrawRectangle(0, y_base, sw, bh, BLACK);
     int y = y_base + (bh - BAR_FS) / 2;
 
-    DrawTextEx(font, "? help", (Vector2){ 8, y }, BAR_FS, 1, HINT_COLOR);
+    DrawTextEx(font, "? help", (Vector2){ 8, y }, BAR_FS, 1, WHITE);
 
     char info[80];
     if (count > 0)
@@ -135,7 +134,7 @@ static void draw_help_bar(Font font, int sw, int sh)
     char left[160];
     snprintf(left, sizeof left,
              "h/j/k/l nudge  |  a/s scale  |  f focus  |"
-             "  Enter save  |  Esc/q quit  |  . repeat  |  ? help");
+             "  Enter save  |  . repeat  |  Esc/q quit");
 
     int y = y_base + (BAR_BH - BAR_FS) / 2;
     DrawTextEx(font, left, (Vector2){ 8, y }, BAR_FS, 1, WHITE);
