@@ -204,9 +204,15 @@ int main(int argc, char **argv)
     // ---- arg parse ----
     if (argc < 4) {
         fprintf(stderr,
-            "Usage: %s <W:H> <image> --output <path>\n",
+            "Usage: %s <W:H> <image> --output <path> [-v]\n",
             argv[0]);
         return 1;
+    }
+
+    bool verbose = false;
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--verbose") == 0)
+            verbose = true;
     }
 
     int aspect_w, aspect_h;
@@ -230,6 +236,10 @@ int main(int argc, char **argv)
         fprintf(stderr, "error: --output is required\n");
         return 1;
     }
+
+    // ---- trace log level ----
+    if (!verbose)
+        SetTraceLogLevel(LOG_ERROR);
 
     // ---- load image ----
     Image img = LoadImage(img_path);
@@ -377,7 +387,8 @@ int main(int argc, char **argv)
                            (float)crop.w, (float)crop.h };
         ImageCrop(&img, rect);
         ExportImage(img, out_path);
-        printf("saved: %s (%d x %d)\n", out_path, crop.w, crop.h);
+        if (verbose)
+            printf("saved: %s (%d x %d)\n", out_path, crop.w, crop.h);
     }
 
     UnloadImage(img);
