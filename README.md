@@ -1,6 +1,6 @@
 # crop-paper
 
-Simple C + Raylib program to crop images for desktop wallpapers.
+Simple C & Raylib program to crop images for desktop wallpapers.
 
 ## Usage
 
