@@ -384,10 +384,6 @@ int main(int argc, char **argv)
                 (Rectangle){ (float)fx, (float)fy,
                              crop.w * focus_scale, crop.h * focus_scale },
                 (Vector2){ 0, 0 }, 0, WHITE);
-            DrawRectangleLinesEx(
-                (Rectangle){ (float)fx, (float)fy,
-                             crop.w * focus_scale, crop.h * focus_scale },
-                1, CROP_OUTLINE);
         } else {
             DrawTexturePro(tex,
                 (Rectangle){ 0, 0, (float)img.width, (float)img.height },
