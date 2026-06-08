@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <fontconfig/fontconfig.h>
+#include "font-embed.h"
 
 #define MIN_CROP 16
 
@@ -166,30 +166,11 @@ typedef enum { KR_A, KR_S, KR_H, KR_J, KR_K, KR_L, KR_DOT, KR_COUNT } KRIdx;
 
 static Font load_mono_font(int font_size)
 {
-    if (!FcInit()) return GetFontDefault();
-
-    FcPattern *pat = FcNameParse((const FcChar8 *)"Iosevka");
-    if (!pat) { FcFini(); return GetFontDefault(); }
-
-    FcConfigSubstitute(NULL, pat, FcMatchPattern);
-    FcDefaultSubstitute(pat);
-
-    FcResult result;
-    FcPattern *match = FcFontMatch(NULL, pat, &result);
-    FcPatternDestroy(pat);
-
-    if (!match) { FcFini(); return GetFontDefault(); }
-
-    FcChar8 *file;
-    Font font = GetFontDefault();
-    if (FcPatternGetString(match, FC_FILE, 0, &file) == FcResultMatch) {
-        font = LoadFontEx((const char *)file, font_size, 0, 0);
-        if (font.texture.id == 0)
-            font = GetFontDefault();
-    }
-
-    FcPatternDestroy(match);
-    FcFini();
+    Font font = LoadFontFromMemory(".ttf",
+        iosevka_subset_ttf, iosevka_subset_ttf_len,
+        font_size, NULL, 0);
+    if (font.texture.id == 0)
+        font = GetFontDefault();
     return font;
 }
 
@@ -357,7 +338,7 @@ int main(int argc, char **argv)
 
     Texture2D tex = LoadTextureFromImage(img);
 
-    // ---- load monospace font (resolve via fontconfig) ----
+    // ---- load embedded monospace font ----
     Font font = load_mono_font(BAR_FS);
 
     SetTargetFPS(60);

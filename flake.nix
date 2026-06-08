@@ -9,31 +9,39 @@
 
     perSystem = f: forAllSystems (system: let
       pkgs = import nixpkgs { inherit system; };
-
       my-font = pkgs.iosevka;
-
-      fontsConf = pkgs.makeFontsConf {
-        fontDirectories = [ my-font ];
-      };
-    in f pkgs my-font fontsConf);
+    in f pkgs my-font);
   in {
-    packages = perSystem (pkgs: my-font: fontsConf: {
+    packages = perSystem (pkgs: my-font: {
       default = pkgs.stdenv.mkDerivation {
         pname = "crop-paper";
         version = "0.1.0";
         src = nixpkgs.lib.cleanSource ./.;
 
-        nativeBuildInputs = with pkgs; [ pkg-config ];
-        buildInputs = with pkgs; [ raylib fontconfig my-font ];
+        nativeBuildInputs = with pkgs; [ pkg-config python3Packages.fonttools ];
+        buildInputs = with pkgs; [ raylib my-font ];
 
         env.NIX_CFLAGS_COMPILE = "-std=c23 -Wall -Wextra -pedantic -O2";
 
         buildPhase = ''
-          export FONTCONFIG_FILE="${fontsConf}"
+          pyftsubset ${my-font}/share/fonts/truetype/Iosevka-Regular.ttf \
+            --unicodes="U+0020-007E" \
+            --output-file=iosevka-subset.ttf
+
+          python -c "
+          import sys
+          data = open('iosevka-subset.ttf', 'rb').read()
+          print('unsigned char iosevka_subset_ttf[] = {')
+          for i in range(0, len(data), 12):
+              print('  ' + ', '.join(f'0x{b:02x}' for b in data[i:i+12]) + ',')
+          print('};')
+          print(f'unsigned int iosevka_subset_ttf_len = {len(data)};')
+          " > font-embed.h
+
           $CC \
             $(pkg-config --cflags raylib) \
             $(pkg-config --libs raylib) -lm \
-            $(pkg-config --cflags --libs fontconfig) \
+            -I. \
             -o crop-paper src/crop-paper.c
         '';
 
@@ -51,13 +59,9 @@
       };
     });
 
-    devShells = perSystem (pkgs: my-font: fontsConf: {
+    devShells = perSystem (pkgs: my-font: {
       default = pkgs.mkShell {
-        buildInputs = with pkgs; [ raylib fontconfig my-font pkg-config ];
-
-        shellHook = ''
-          export FONTCONFIG_FILE="${fontsConf}"
-        '';
+        buildInputs = with pkgs; [ raylib my-font pkg-config python3Packages.fonttools ];
       };
     });
 
