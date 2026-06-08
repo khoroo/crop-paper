@@ -10,7 +10,7 @@
     perSystem = f: forAllSystems (system: let
       pkgs = import nixpkgs { inherit system; };
 
-      my-font = pkgs.jetbrains-mono;
+      my-font = pkgs.iosevka;
 
       fontsConf = pkgs.makeFontsConf {
         fontDirectories = [ my-font ];

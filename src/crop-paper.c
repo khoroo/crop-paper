@@ -12,6 +12,8 @@
 
 #define MIN_CROP 16
 
+typedef struct { int key; int val; } LastAction;
+
 // ── palette ─────────────────────────────────────────────────────────
 static const Color CROP_OUTLINE = { 0xcc, 0x24, 0x1d, 255 };
 static const Color HINT_COLOR   = { 200, 200, 200, 255 };
@@ -133,7 +135,7 @@ static void draw_help_bar(Font font, int sw, int sh)
     char left[160];
     snprintf(left, sizeof left,
              "h/j/k/l nudge  |  a/s scale  |  f focus  |"
-             "  Enter save  |  Esc/q quit  |  ? help");
+             "  Enter save  |  Esc/q quit  |  . repeat  |  ? help");
 
     int y = y_base + (BAR_BH - BAR_FS) / 2;
     DrawTextEx(font, left, (Vector2){ 8, y }, BAR_FS, 1, WHITE);
@@ -158,13 +160,15 @@ static bool key_repeat(KeyRep *kr, int key)
     return false;
 }
 
+typedef enum { KR_A, KR_S, KR_H, KR_J, KR_K, KR_L, KR_DOT, KR_COUNT } KRIdx;
+
 // ── font loading ────────────────────────────────────────────────────
 
 static Font load_mono_font(int font_size)
 {
     if (!FcInit()) return GetFontDefault();
 
-    FcPattern *pat = FcNameParse((const FcChar8 *)"JetBrains Mono");
+    FcPattern *pat = FcNameParse((const FcChar8 *)"Iosevka");
     if (!pat) { FcFini(); return GetFontDefault(); }
 
     FcConfigSubstitute(NULL, pat, FcMatchPattern);
@@ -195,6 +199,101 @@ static inline int step_val(int count)
 {
     return count > 0 ? count
          : (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT) ? 10 : 1);
+}
+
+// ── input dispatch ──────────────────────────────────────────────────
+
+static void dispatch_action(Rect *r, int w, int h, int aw, int ah,
+                            int key, int val)
+{
+    switch (key) {
+    case KEY_A: scale_from_centre(r, w, h, aw, ah,  1, val); break;
+    case KEY_S: scale_from_centre(r, w, h, aw, ah, -1, val); break;
+    case KEY_H: nudge(r, w, h, -val, 0); break;
+    case KEY_J: nudge(r, w, h, 0, val); break;
+    case KEY_K: nudge(r, w, h, 0, -val); break;
+    case KEY_L: nudge(r, w, h, val, 0); break;
+    }
+}
+
+static void handle_input(Rect *crop, int img_w, int img_h,
+                         int aw, int ah,
+                         int *count, bool *show_help, bool *crop_view,
+                         bool *save, bool *quit,
+                         KeyRep *kr, LastAction *last)
+{
+    // ---- count prefix ----
+    for (int k = KEY_ZERO; k <= KEY_NINE; k++) {
+        if (IsKeyPressed(k)) {
+            *count = *count * 10 + (k - KEY_ZERO);
+            return;
+        }
+    }
+
+    // ---- actions ----
+    if (IsKeyPressed(KEY_ENTER)) {
+        *count = 0; *save = true; *quit = true;
+        return;
+    }
+    if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_Q)) {
+        *count = 0; *quit = true;
+        return;
+    }
+    if (IsKeyPressed(KEY_SLASH)
+        && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
+    {
+        *count = 0; *show_help = !*show_help;
+        return;
+    }
+    if (IsKeyPressed(KEY_F)) {
+        *count = 0; *crop_view = !*crop_view;
+        return;
+    }
+
+    // ---- repeatable actions ----
+    if (key_repeat(&kr[KR_A], KEY_A)) {
+        int s = step_val(*count); *count = 0;
+        dispatch_action(crop, img_w, img_h, aw, ah, KEY_A, s);
+        *last = (LastAction){KEY_A, s};
+        return;
+    }
+    if (key_repeat(&kr[KR_S], KEY_S)) {
+        int s = step_val(*count); *count = 0;
+        dispatch_action(crop, img_w, img_h, aw, ah, KEY_S, s);
+        *last = (LastAction){KEY_S, s};
+        return;
+    }
+    if (key_repeat(&kr[KR_H], KEY_H)) {
+        int n = step_val(*count); *count = 0;
+        dispatch_action(crop, img_w, img_h, aw, ah, KEY_H, n);
+        *last = (LastAction){KEY_H, n};
+        return;
+    }
+    if (key_repeat(&kr[KR_J], KEY_J)) {
+        int n = step_val(*count); *count = 0;
+        dispatch_action(crop, img_w, img_h, aw, ah, KEY_J, n);
+        *last = (LastAction){KEY_J, n};
+        return;
+    }
+    if (key_repeat(&kr[KR_K], KEY_K)) {
+        int n = step_val(*count); *count = 0;
+        dispatch_action(crop, img_w, img_h, aw, ah, KEY_K, n);
+        *last = (LastAction){KEY_K, n};
+        return;
+    }
+    if (key_repeat(&kr[KR_L], KEY_L)) {
+        int n = step_val(*count); *count = 0;
+        dispatch_action(crop, img_w, img_h, aw, ah, KEY_L, n);
+        *last = (LastAction){KEY_L, n};
+        return;
+    }
+
+    // ---- repeat last action ----
+    if (key_repeat(&kr[KR_DOT], KEY_PERIOD) && last->key) {
+        *count = 0;
+        dispatch_action(crop, img_w, img_h, aw, ah, last->key, last->val);
+        return;
+    }
 }
 
 // ── main ────────────────────────────────────────────────────────────
@@ -269,68 +368,16 @@ int main(int argc, char **argv)
     bool save = false;
     bool quit = false;
 
-    KeyRep kr_a = {0}, kr_s = {0};
-    KeyRep kr_h = {0}, kr_j = {0}, kr_k = {0}, kr_l = {0};
+    KeyRep kr[KR_COUNT] = {0};
+    LastAction last = {0};
 
     // ---- main loop ----
     while (!quit && !WindowShouldClose()) {
-        // --- input ---
-        // ---- count prefix ----
-        int d;
-        for (d = 0; d <= 9; d++) {
-            if (IsKeyPressed(KEY_ZERO + d)) {
-                count = count * 10 + d;
-                break;
-            }
-        }
-        if (d > 9) {
-        // ---- actions ----
-        if (IsKeyPressed(KEY_ENTER)) {
-                count = 0;
-                save = true;
-                quit = true;
-            } else if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_Q)) {
-                count = 0;
-                quit = true;
-
-            } else if (IsKeyPressed(KEY_SLASH)
-                       && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT))) {
-                count = 0;
-                show_help = !show_help;
-
-            } else if (IsKeyPressed(KEY_F)) {
-                count = 0;
-                crop_view = !crop_view;
-
-            } else if (key_repeat(&kr_a, KEY_A)) {
-                int s = step_val(count);
-                count = 0;
-                scale_from_centre(&crop, img.width, img.height,
-                                  aspect_w, aspect_h, 1, s);
-            } else if (key_repeat(&kr_s, KEY_S)) {
-                int s = step_val(count);
-                count = 0;
-                scale_from_centre(&crop, img.width, img.height,
-                                  aspect_w, aspect_h, -1, s);
-
-            } else if (key_repeat(&kr_h, KEY_H)) {
-                int n = step_val(count);
-                count = 0;
-                nudge(&crop, img.width, img.height, -n, 0);
-            } else if (key_repeat(&kr_j, KEY_J)) {
-                int n = step_val(count);
-                count = 0;
-                nudge(&crop, img.width, img.height, 0, n);
-            } else if (key_repeat(&kr_k, KEY_K)) {
-                int n = step_val(count);
-                count = 0;
-                nudge(&crop, img.width, img.height, 0, -n);
-            } else if (key_repeat(&kr_l, KEY_L)) {
-                int n = step_val(count);
-                count = 0;
-                nudge(&crop, img.width, img.height, n, 0);
-            }
-        }
+        handle_input(&crop, img.width, img.height,
+                     aspect_w, aspect_h,
+                     &count, &show_help, &crop_view,
+                     &save, &quit,
+                     kr, &last);
 
         // --- recalc layout (window may have been resized) ---
 
