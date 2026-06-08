@@ -17,5 +17,15 @@ Controls:
 - `?` — toggle help
 - Number prefix repeats an action N times
 
+## Dependencies
+
+- **C23 compiler** (e.g. GCC, Clang)
+- **Raylib** (>= 4.5)
+- **pkg-config**
+- **Python 3** with `fonttools` (for font subsetting at build time)
+- **Iosevka** font (or replace with your preferred monospace font)
+
+Build requires `raylib` development headers/libraries and `libm`.
+
 ## LLM Declaration
 produced with DeepSeek Flash V4 & OpenCode
